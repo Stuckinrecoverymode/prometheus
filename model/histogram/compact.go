@@ -16,8 +16,27 @@ package histogram
 // compactBuckets is a generic function used by both Histogram.Compact and
 // FloatHistogram.Compact.
 func compactBuckets[Bucket float64 | int64](buckets []Bucket, spans []Span, maxEmptyBuckets int) ([]Bucket, []Span) {
-	if len(buckets) == 0 {
-		return buckets, spans
+	// Fast path: If there are no empty buckets AND no offset in any span is
+	// <= maxEmptyBuckets AND no span has length 0, there is nothing to do and we can return
+	// immediately. We check that first because it's cheap and presumably
+	// common.
+	nothingToDo := true
+	for _, bucket := range buckets {
+		if bucket == 0 {
+			nothingToDo = false
+			break
+		}
+	}
+	if nothingToDo {
+		for _, span := range spans {
+			if int(span.Offset) <= maxEmptyBuckets || span.Length == 0 {
+				nothingToDo = false
+				break
+			}
+		}
+		if nothingToDo {
+			return buckets, spans
+		}
 	}
 
 	var iBucket, iSpan int
