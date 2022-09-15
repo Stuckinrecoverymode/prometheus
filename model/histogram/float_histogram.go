@@ -348,6 +348,24 @@ func addBucket(
 // maxEmptyBuckets. (The actual implementation might do something more efficient
 // but with the same result.)  The compaction happens "in place" in the
 // receiving histogram, but a pointer to it is returned for convenience.
+//
+// The ideal value for maxEmptyBuckets depends on circumstances. The motivation
+// to set maxEmptyBuckets > 0 is the assumption that is is less overhead to
+// represent very few empty buckets explicitly within one span than cutting the
+// one span into two to treat the empty buckets as a gap between the two spans,
+// both in terms of storage requirement as well as in terms of encoding and
+// decoding effort. However, the tradeoffs are subtle. For one, they are
+// different in the exposition format vs. in a TSDB chunk vs. for the in-memory
+// representation as Go types. In the TSDB, as an additional aspects, the span
+// layout is only stored once per chunk, while many histograms with that same
+// chunk layout are then only stored with their buckets (so that even a single
+// empty bucket will be stored many times).
+//
+// For the Go types, an additional Span takes 8 bytes. Similarly, an additional
+// bucket takes 8 bytes. Therefore, with a single separating empty bucket, both
+// options have the same storage requirement, but the single-span solution is
+// easier to iterate through. Still, the safest bet is to use maxEmptyBuckets==0
+// and only use a larger number if you know what you are doing.
 func (h *FloatHistogram) Compact(maxEmptyBuckets int) *FloatHistogram {
 	h.PositiveBuckets, h.PositiveSpans = compactBuckets(
 		h.PositiveBuckets, h.PositiveSpans, maxEmptyBuckets,
@@ -616,7 +634,7 @@ func (h *FloatHistogram) trimBucketsInZeroBucket() {
 	// We are abusing Compact to trim the buckets set to zero
 	// above. Premature compacting could cause additional cost, but this
 	// code path is probably rarely used anyway.
-	h.Compact(3)
+	h.Compact(0)
 }
 
 // reconcileZeroBuckets finds a zero bucket large enough to include the zero

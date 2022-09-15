@@ -1244,8 +1244,8 @@ func TestFloatHistogramAdd(t *testing.T) {
 				Sum:             3.579,
 				PositiveSpans:   []Span{{1, 5}},
 				PositiveBuckets: []float64{2, 6, 10, 9, 5},
-				NegativeSpans:   []Span{{3, 7}},
-				NegativeBuckets: []float64{3, 2, 1, 0, 4, 9, 6},
+				NegativeSpans:   []Span{{3, 3}, {1, 3}},
+				NegativeBuckets: []float64{3, 2, 1, 4, 9, 6},
 			},
 		},
 		{
@@ -1277,8 +1277,8 @@ func TestFloatHistogramAdd(t *testing.T) {
 				Sum:             3.579,
 				PositiveSpans:   []Span{{-1, 1}, {1, 5}},
 				PositiveBuckets: []float64{0, 2, 6, 10, 9, 5},
-				NegativeSpans:   []Span{{3, 7}},
-				NegativeBuckets: []float64{3, 2, 1, 0, 4, 9, 6},
+				NegativeSpans:   []Span{{3, 3}, {1, 3}},
+				NegativeBuckets: []float64{3, 2, 1, 4, 9, 6},
 			},
 		},
 		{
@@ -1310,8 +1310,8 @@ func TestFloatHistogramAdd(t *testing.T) {
 				Sum:             3.579,
 				PositiveSpans:   []Span{{1, 5}},
 				PositiveBuckets: []float64{2, 6, 10, 9, 5},
-				NegativeSpans:   []Span{{3, 7}},
-				NegativeBuckets: []float64{3, 2, 1, 0, 4, 9, 6},
+				NegativeSpans:   []Span{{3, 3}, {1, 3}},
+				NegativeBuckets: []float64{3, 2, 1, 4, 9, 6},
 			},
 		},
 		{
@@ -1345,8 +1345,8 @@ func TestFloatHistogramAdd(t *testing.T) {
 				Sum:             3.579,
 				PositiveSpans:   []Span{{-1, 7}},
 				PositiveBuckets: []float64{6, 4, 2, 6, 10, 9, 5},
-				NegativeSpans:   []Span{{3, 7}},
-				NegativeBuckets: []float64{3, 2, 1, 0, 4, 9, 6},
+				NegativeSpans:   []Span{{3, 3}, {1, 3}},
+				NegativeBuckets: []float64{3, 2, 1, 4, 9, 6},
 			},
 		},
 		{
