@@ -410,3 +410,259 @@ func TestHistogramToFloat(t *testing.T) {
 
 	require.Equal(t, h.String(), fh.String())
 }
+
+func TestHistogramCompact(t *testing.T) {
+	cases := []struct {
+		name            string
+		in              *Histogram
+		maxEmptyBuckets int
+		expected        *Histogram
+	}{
+		{
+			"empty histogram",
+			&Histogram{},
+			0,
+			&Histogram{},
+		},
+		{
+			"nothing should happen",
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 1}, {2, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42},
+				NegativeSpans:   []Span{{3, 2}, {3, 2}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 1}, {2, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42},
+				NegativeSpans:   []Span{{3, 2}, {3, 2}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000},
+			},
+		},
+		{
+			"eliminate zero offsets",
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 1}, {0, 3}, {0, 1}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {0, 2}, {2, 1}, {0, 1}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 5}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 4}, {2, 2}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+		},
+		{
+			"eliminate zero length",
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 2}, {2, 0}, {3, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {0, 0}, {2, 0}, {1, 4}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 2}, {5, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 4}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+		},
+		{
+			"eliminate multiple zero length spans",
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 2}, {2, 0}, {2, 0}, {2, 0}, {3, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 2}, {9, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+			},
+		},
+		{
+			"cut empty buckets at start or end",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 4}, {5, 3}},
+				PositiveBuckets: []int64{0, 0, 1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4, 0},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 2}, {5, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 4}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+		},
+		{
+			"cut empty buckets at start and end",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 4}, {5, 6}},
+				PositiveBuckets: []int64{0, 0, 1, 3, -4, 42, 3, 0, 0, 0},
+				NegativeSpans:   []Span{{-2, 4}, {3, 5}},
+				NegativeBuckets: []int64{0, 0, 5, 3, 1.234e5, 1000, 3, 4, 0},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 2}, {5, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 4}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+		},
+		{
+			"cut empty buckets at start or end of spans, even in the middle",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 6}, {3, 6}},
+				PositiveBuckets: []int64{0, 0, 1, 3, 0, 0, -4, 42, 3, 0, 0, 0},
+				NegativeSpans:   []Span{{0, 2}, {2, 6}},
+				NegativeBuckets: []int64{5, 3, 0, 1.234e5, 1000, 3, 4, 0},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 2}, {5, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 4}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+		},
+		{
+			"cut empty buckets at start or end but merge spans due to maxEmptyBuckets",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 4}, {5, 3}},
+				PositiveBuckets: []int64{0, 0, 1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4, 0},
+			},
+			10,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 10}},
+				PositiveBuckets: []int64{1, 3, 0, 0, 0, 0, 0, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 9}},
+				NegativeBuckets: []int64{5, 3, 0, 0, 0, 1.234e5, 1000, 3, 4},
+			},
+		},
+		{
+			"cut empty buckets from the middle of a span",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 6}, {3, 3}},
+				PositiveBuckets: []int64{0, 0, 1, 0, 0, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 0, 3, 4},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 1}, {2, 1}, {3, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 2}, {1, 2}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 3, 4},
+			},
+		},
+		{
+			"cut out a span containing only empty buckets",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 3}, {2, 2}, {3, 4}},
+				PositiveBuckets: []int64{0, 0, 1, 0, 0, 3, -4, 42, 3},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 1}, {7, 4}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+			},
+		},
+		{
+			"cut empty buckets from the middle of a span, avoiding some due to maxEmptyBuckets",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 6}, {3, 3}},
+				PositiveBuckets: []int64{0, 0, 1, 0, 0, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 0, 3, 4},
+			},
+			1,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 1}, {2, 1}, {3, 3}},
+				PositiveBuckets: []int64{1, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 0, 3, 4},
+			},
+		},
+		{
+			"avoiding all cutting of empty buckets from the middle of a chunk due to maxEmptyBuckets",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 6}, {3, 3}},
+				PositiveBuckets: []int64{0, 0, 1, 0, 0, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 0, 3, 4},
+			},
+			2,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 4}, {3, 3}},
+				PositiveBuckets: []int64{1, 0, 0, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 0, 3, 4},
+			},
+		},
+		{
+			"everything merged into one span due to maxEmptyBuckets",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 6}, {3, 3}},
+				PositiveBuckets: []int64{0, 0, 1, 0, 0, 3, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 2}, {3, 5}},
+				NegativeBuckets: []int64{5, 3, 1.234e5, 1000, 0, 3, 4},
+			},
+			3,
+			&Histogram{
+				PositiveSpans:   []Span{{-2, 10}},
+				PositiveBuckets: []int64{1, 0, 0, 3, 0, 0, 0, -4, 42, 3},
+				NegativeSpans:   []Span{{0, 10}},
+				NegativeBuckets: []int64{5, 3, 0, 0, 0, 1.234e5, 1000, 0, 3, 4},
+			},
+		},
+		{
+			"only empty buckets and maxEmptyBuckets greater zero",
+			&Histogram{
+				PositiveSpans:   []Span{{-4, 6}, {3, 3}},
+				PositiveBuckets: []int64{0, 0, 0, 0, 0, 0, 0, 0, 0},
+				NegativeSpans:   []Span{{0, 7}},
+				NegativeBuckets: []int64{0, 0, 0, 0, 0, 0, 0},
+			},
+			3,
+			&Histogram{
+				PositiveSpans:   []Span{},
+				PositiveBuckets: []int64{},
+				NegativeSpans:   []Span{},
+				NegativeBuckets: []int64{},
+			},
+		},
+		{
+			"multiple spans of only empty buckets",
+			&Histogram{
+				PositiveSpans:   []Span{{-10, 2}, {2, 1}, {3, 3}},
+				PositiveBuckets: []int64{0, 0, 0, 0, 2, 3},
+				NegativeSpans:   []Span{{-10, 2}, {2, 1}, {3, 3}},
+				NegativeBuckets: []int64{2, 3, 0, 0, 0, 0},
+			},
+			0,
+			&Histogram{
+				PositiveSpans:   []Span{{-1, 2}},
+				PositiveBuckets: []int64{2, 3},
+				NegativeSpans:   []Span{{-10, 2}},
+				NegativeBuckets: []int64{2, 3},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.expected, c.in.Compact(c.maxEmptyBuckets))
+			// Has it also happened in-place?
+			require.Equal(t, c.expected, c.in)
+		})
+	}
+}
